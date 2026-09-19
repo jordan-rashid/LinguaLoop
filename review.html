@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Daily review</h1>
+{% if not cards %}
+  <p>Nothing due right now.</p>
+{% endif %}
+{% for card in cards %}
+<div style="border: 1px solid #ccc; padding: 0.75rem; margin-bottom: 0.75rem;">
+  <p><strong>{{ card.headword }}</strong> — <em>{{ card.context_sentence }}</em></p>
+  <p>Translation: {{ card.translation }}<br>Definition: {{ card.definition }}</p>
+  <form method="post" action="/review/{{ card.id }}">
+    <button name="rating" value="again">Again</button>
+    <button name="rating" value="hard">Hard</button>
+    <button name="rating" value="good">Good</button>
+    <button name="rating" value="easy">Easy</button>
+  </form>
+</div>
+{% endfor %}
+{% endblock %}

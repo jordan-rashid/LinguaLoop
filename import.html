@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Import a passage</h1>
+<p>Paste some French text below. Words already known, already active as
+cards, or already pending as candidates are filtered out automatically.</p>
+<form method="post" action="/import">
+  <textarea name="text" rows="8" cols="60" placeholder="Collez un paragraphe en français ici..."></textarea><br>
+  <button type="submit">Extract Vocabulary</button>
+</form>
+{% endblock %}

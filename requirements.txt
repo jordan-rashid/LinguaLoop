@@ -1,0 +1,12 @@
+Flask>=3.1
+Flask-SQLAlchemy>=3.1
+spacy>=3.8
+requests>=2.32
+pytest>=8.0
+
+# After installing requirements, also run:
+#   python -m spacy download fr_core_news_sm
+#
+# To add another language later: download its spaCy model the same way,
+# then register it in SUPPORTED_MODELS in app/services/extraction.py
+# (see README.md "Language: French for now, designed to add more later").

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+<ul>
+  <li>Cards due today: {{ stats.cards_due_today }}</li>
+  <li>Total active cards: {{ stats.total_active_cards }}</li>
+  <li>Known words: {{ stats.known_words }}</li>
+  <li>Days with a review logged: {{ stats.days_with_a_review_logged }}</li>
+</ul>
+{% endblock %}
