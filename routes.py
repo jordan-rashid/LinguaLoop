@@ -1,9 +1,9 @@
 """
 Flask routes implementing the revised API surface from the Week 1
-(Revised) design dump. Candidate accept/reject endpoints are new this
-sprint; everything else maps directly onto the original endpoint table.
+(Revised) design dump. Candidate accept/reject endpoints were added in
+sprint 1; sprint 2 adds pagination to the candidates listing.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
 
@@ -17,6 +17,10 @@ bp = Blueprint("api", __name__, url_prefix="/api")
 
 translation_service = create_translation_service()
 definition_service = create_definition_service()
+
+# Sprint 2: default page size for candidate review, addressing the peer
+# feedback that a long passage could dump dozens of words onto one screen.
+CANDIDATE_PAGE_SIZE = 10
 
 
 def _get_or_create_demo_user():
@@ -60,9 +64,33 @@ def submit_source():
 
 @bp.route("/sources/<int:source_id>/candidates", methods=["GET"])
 def list_candidates_for_source(source_id):
-    """GET /api/sources/:id/candidates — candidates awaiting accept/reject."""
-    candidates = Candidate.query.filter_by(source_id=source_id).all()
-    return jsonify([_candidate_to_dict(c) for c in candidates])
+    """GET /api/sources/:id/candidates — candidates awaiting accept/reject.
+
+    Sprint 2: paginated via ?limit=&offset=, addressing the review
+    feedback that a long passage could surface dozens of candidates onto
+    one screen at once. Defaults to CANDIDATE_PAGE_SIZE per page if the
+    caller doesn't specify a limit.
+    """
+    try:
+        limit = int(request.args.get("limit", CANDIDATE_PAGE_SIZE))
+        offset = int(request.args.get("offset", 0))
+    except ValueError:
+        return jsonify({"error": "limit and offset must be integers"}), 400
+
+    limit = max(1, min(limit, 100))  # sane bounds regardless of what's requested
+    offset = max(0, offset)
+
+    base_query = Candidate.query.filter_by(source_id=source_id)
+    total = base_query.count()
+    page = base_query.order_by(Candidate.id).offset(offset).limit(limit).all()
+
+    return jsonify({
+        "candidates": [_candidate_to_dict(c) for c in page],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(page) < total,
+    })
 
 
 # ------------------------------------------------------------- candidates --
@@ -165,16 +193,41 @@ def submit_review(card_id):
 
 # -------------------------------------------------------------- dashboard --
 
+def _consecutive_day_streak(review_days: set, today) -> int:
+    """True consecutive-day streak ending today or yesterday.
+
+    Sprint 1 shipped a placeholder ("days_with_a_review_logged" — just a
+    count of distinct days, not necessarily consecutive). This sprint
+    replaces it with an actual streak: count backward from today, and
+    stop at the first gap. If today has no review yet, the streak still
+    counts as "alive" as long as yesterday had one — a learner shouldn't
+    see their streak reset to 0 just because they haven't reviewed *yet
+    today*.
+    """
+    if not review_days:
+        return 0
+
+    if today not in review_days:
+        # Streak isn't broken unless yesterday is also missing.
+        if (today - timedelta(days=1)) not in review_days:
+            return 0
+        cursor = today - timedelta(days=1)
+    else:
+        cursor = today
+
+    streak = 0
+    while cursor in review_days:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
 @bp.route("/dashboard", methods=["GET"])
 def dashboard():
-    """GET /api/dashboard — streak, cards-due count, mastery stats.
-
-    Streak logic is intentionally simple for sprint 1: count of distinct
-    calendar days in the last 30 with at least one review logged. A more
-    accurate consecutive-day streak is a good sprint 2 refinement.
-    """
+    """GET /api/dashboard — streak, cards-due count, mastery stats."""
     user = _get_or_create_demo_user()
     now = datetime.utcnow()
+    today = now.date()
 
     total_active_cards = Card.query.filter_by(user_id=user.id, status="active").count()
     due_now = (
@@ -188,11 +241,13 @@ def dashboard():
         r.reviewed_at.date()
         for r in ReviewHistory.query.join(Card).filter(Card.user_id == user.id).all()
     }
+    streak = _consecutive_day_streak(review_days, today)
 
     return jsonify({
         "cards_due_today": due_now,
         "total_active_cards": total_active_cards,
         "known_words": known_word_count,
+        "current_streak_days": streak,
         "days_with_a_review_logged": len(review_days),
     })
 

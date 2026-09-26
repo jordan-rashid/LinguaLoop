@@ -1,0 +1,139 @@
+/* Sprint 2: light styling pass. Sprint 1 deliberately shipped unstyled
+   pages so development time went to the core loop first; this is the
+   "improve appearance once main features work" step from the plan. */
+
+:root {
+  --accent: #2f6f4f;
+  --accent-light: #e7f3ec;
+  --border: #d7d7d7;
+  --text: #222;
+  --muted: #666;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+  max-width: 720px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  line-height: 1.5;
+}
+
+nav {
+  margin-bottom: 2rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+nav a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  margin-right: 1.25rem;
+}
+
+nav a:hover { text-decoration: underline; }
+
+h1 { font-size: 1.6rem; margin-bottom: 0.5rem; }
+
+textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+button {
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+button:hover { opacity: 0.9; }
+
+button[value="reject"], form.reject button {
+  background: white;
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.75rem;
+  background: #fff;
+}
+
+.card .headword {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.card .context {
+  color: var(--muted);
+  margin: 0.3rem 0 0.6rem 0;
+  font-style: italic;
+}
+
+.actions form { display: inline-block; margin-right: 0.4rem; }
+
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.pagination a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.pagination .disabled { color: #bbb; }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.stat-tile {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--accent-light);
+  text-align: center;
+}
+
+.stat-tile .value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.stat-tile .label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+
+.rating-buttons button { margin-right: 0.4rem; }
+.rating-buttons button[value="again"] { background: #b3441e; border-color: #b3441e; }
+.rating-buttons button[value="hard"] { background: #b38b1e; border-color: #b38b1e; }
+.rating-buttons button[value="good"] { background: var(--accent); border-color: var(--accent); }
+.rating-buttons button[value="easy"] { background: #1e6fb3; border-color: #1e6fb3; }

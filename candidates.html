@@ -1,23 +1,46 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Review extracted words</h1>
+<p>{{ total }} candidate{{ "s" if total != 1 else "" }} from this passage.</p>
+
 {% if not candidates %}
-  <p>No candidates left for this passage — accept/reject them all, or nothing new was found.</p>
+  <p>No candidates left on this page — accept/reject them all, or nothing new was found.</p>
 {% endif %}
-<ul style="list-style: none; padding: 0;">
-  {% for c in candidates %}
-  <li style="border: 1px solid #ccc; padding: 0.75rem; margin-bottom: 0.5rem;">
-    <strong>{{ c.headword }}</strong>
-    <p style="color: #444; margin: 0.25rem 0;">&ldquo;{{ c.context_sentence }}&rdquo;</p>
-    <form method="post" action="/candidates/{{ c.id }}/accept" style="display:inline;">
+
+{% for c in candidates %}
+<div class="card">
+  <div class="headword">{{ c.headword }}</div>
+  <p class="context">&ldquo;{{ c.context_sentence }}&rdquo;</p>
+  <div class="actions">
+    <form method="post" action="/candidates/{{ c.id }}/accept">
       <input type="hidden" name="source_id" value="{{ source_id }}">
+      <input type="hidden" name="page" value="{{ page }}">
       <button type="submit">Accept</button>
     </form>
-    <form method="post" action="/candidates/{{ c.id }}/reject" style="display:inline;">
+    <form method="post" action="/candidates/{{ c.id }}/reject" class="reject">
       <input type="hidden" name="source_id" value="{{ source_id }}">
+      <input type="hidden" name="page" value="{{ page }}">
       <button type="submit">Reject</button>
     </form>
-  </li>
-  {% endfor %}
-</ul>
+  </div>
+</div>
+{% endfor %}
+
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}
+    <a href="/candidates/{{ source_id }}?page={{ page - 1 }}">&larr; Previous</a>
+  {% else %}
+    <span class="disabled">&larr; Previous</span>
+  {% endif %}
+
+  <span>Page {{ page }} of {{ total_pages }}</span>
+
+  {% if page < total_pages %}
+    <a href="/candidates/{{ source_id }}?page={{ page + 1 }}">Next &rarr;</a>
+  {% else %}
+    <span class="disabled">Next &rarr;</span>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

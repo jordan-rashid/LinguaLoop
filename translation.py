@@ -6,16 +6,23 @@ Split out from DefinitionService per peer feedback — a translation API
 definitions, so the two are separate providers behind the same interface.
 
 The concrete provider is still an open item in the Week 1 design dump
-(comparing DeepL vs. Google Translate on cost/rate limits). This sprint
-ships:
-  - a working MockTranslationProvider (small curated ES->EN dictionary)
-    so the rest of the pipeline can be built and demoed end-to-end now,
+(comparing DeepL vs. Google Translate on cost/rate limits). Sprint 2
+re-checked outbound network access from this dev environment specifically
+to see if that decision could finally be tested — it's still blocked
+(confirmed by a direct request attempt during this sprint), so this
+remains:
+  - a working MockTranslationProvider (curated FR->EN dictionary,
+    expanded this sprint) so the rest of the pipeline can be built and
+    demoed end-to-end now,
   - a GoogleTranslateProvider stub showing the intended real integration,
     which needs an API key and outbound network access this sandboxed
     dev environment doesn't have — it is untested here, not because the
     code is wrong, but because it can't reach the real API from this box.
 
-Swapping providers is a one-line change in create_translation_service().
+Sprint 2 addition: create_translation_service() now reads
+LINGUALOOP_TRANSLATION_PROVIDER so a real provider can be switched on
+with an environment variable once one is chosen and tested outside this
+sandbox, instead of needing a code change.
 """
 import os
 
@@ -54,6 +61,19 @@ class MockTranslationProvider(TranslationProvider):
         "pain": "bread",
         "voiture": "car",
         "table": "table",
+        # expanded in sprint 2 to cover more realistic full-sentence demo text
+        "professeur": "teacher / professor",
+        "leçon": "lesson",
+        "étudiant": "student",
+        "explication": "explanation",
+        "directeur": "director / principal",
+        "salle": "room",
+        "classe": "class / classroom",
+        "employé": "employee",
+        "fenêtre": "window",
+        "bureau": "office / desk",
+        "bibliothécaire": "librarian",
+        "patience": "patience",
     }
 
     def translate(self, word: str, source_lang: str, target_lang: str = "en") -> str:
@@ -91,6 +111,12 @@ class GoogleTranslateProvider(TranslationProvider):
 
 
 def create_translation_service() -> TranslationProvider:
-    """Factory — swap this to GoogleTranslateProvider() once a provider
-    and API key are locked in."""
+    """Factory. Reads LINGUALOOP_TRANSLATION_PROVIDER ("mock" | "google")
+    so a real provider can be switched on via environment variable once
+    it's chosen and verified outside this sandbox, without a code change.
+    Defaults to the mock provider.
+    """
+    provider_name = os.environ.get("LINGUALOOP_TRANSLATION_PROVIDER", "mock").lower()
+    if provider_name == "google":
+        return GoogleTranslateProvider()
     return MockTranslationProvider()

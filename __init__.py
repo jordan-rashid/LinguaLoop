@@ -31,12 +31,17 @@ def create_app(test_config: dict = None) -> Flask:
     return app
 
 
+# Sprint 2: candidate pages are paginated to match the API's pagination
+# (see CANDIDATE_PAGE_SIZE in app/routes.py) — a long passage no longer
+# dumps every extracted word onto one screen.
+WEB_CANDIDATE_PAGE_SIZE = 10
+
+
 def _register_web_views(app: Flask):
-    """Minimal server-rendered pages so sprint 1 can be demoed by hand,
-    without needing a separate frontend build. This is intentionally
-    plain (no styling) — per the plan, appearance work comes after the
-    core loop works, and low-fidelity wireframes are the design-time
-    stand-in for this until the real UI is built.
+    """Server-rendered pages so the pipeline can be demoed by hand without
+    a separate frontend build. Sprint 1 left these intentionally unstyled
+    (core loop first); sprint 2 adds a light CSS pass now that the loop is
+    proven to work, plus candidate pagination.
     """
 
     @app.route("/")
@@ -45,8 +50,6 @@ def _register_web_views(app: Flask):
 
     @app.route("/import", methods=["POST"])
     def do_import():
-        import requests
-
         text = request.form.get("text", "")
         with app.test_client() as client:
             resp = client.post("/api/sources", json={"text": text})
@@ -55,22 +58,39 @@ def _register_web_views(app: Flask):
 
     @app.route("/candidates/<int:source_id>")
     def candidates_page(source_id):
-        candidates = Candidate.query.filter_by(source_id=source_id).all()
-        return render_template("candidates.html", candidates=candidates, source_id=source_id)
+        page = max(1, request.args.get("page", 1, type=int))
+        offset = (page - 1) * WEB_CANDIDATE_PAGE_SIZE
+
+        base_query = Candidate.query.filter_by(source_id=source_id).order_by(Candidate.id)
+        total = base_query.count()
+        candidates = base_query.offset(offset).limit(WEB_CANDIDATE_PAGE_SIZE).all()
+
+        total_pages = max(1, (total + WEB_CANDIDATE_PAGE_SIZE - 1) // WEB_CANDIDATE_PAGE_SIZE)
+
+        return render_template(
+            "candidates.html",
+            candidates=candidates,
+            source_id=source_id,
+            page=page,
+            total_pages=total_pages,
+            total=total,
+        )
 
     @app.route("/candidates/<int:candidate_id>/accept", methods=["POST"])
     def accept_candidate_web(candidate_id):
         source_id = request.form.get("source_id")
+        page = request.form.get("page", 1)
         with app.test_client() as client:
             client.post(f"/api/candidates/{candidate_id}/accept")
-        return redirect(url_for("candidates_page", source_id=source_id))
+        return redirect(url_for("candidates_page", source_id=source_id, page=page))
 
     @app.route("/candidates/<int:candidate_id>/reject", methods=["POST"])
     def reject_candidate_web(candidate_id):
         source_id = request.form.get("source_id")
+        page = request.form.get("page", 1)
         with app.test_client() as client:
             client.delete(f"/api/candidates/{candidate_id}")
-        return redirect(url_for("candidates_page", source_id=source_id))
+        return redirect(url_for("candidates_page", source_id=source_id, page=page))
 
     @app.route("/review")
     def review_page():

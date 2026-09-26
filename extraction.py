@@ -12,8 +12,20 @@ Only the first review flagged this gap: the original design filtered
 known_words alone, which allowed the same word to surface twice if it
 showed up in two different imports before either was reviewed.
 
-Target language for this sprint is French (fr_core_news_sm). See the
+Target language for this sprint is French (fr_core_news_md). See the
 SUPPORTED_MODELS note below for how another language gets added later.
+
+Sprint 2 update: upgraded from fr_core_news_sm to fr_core_news_md after
+sprint 1 flagged inconsistent verb lemmatization as a known limitation.
+Side-by-side testing on the exact sentence that failed in sprint 1
+("Le chien mange du pain dans la maison tous les jours.") confirmed the
+medium model correctly lemmatizes "mange" -> "manger" where the small
+model returned "mange" (i.e., left it unlemmatized). The medium model
+still isn't perfect — genuinely ambiguous words like "court" (can be the
+adjective "short" or a form of the verb "courir", "to run") are still
+occasionally mistagged — but this is a real, measurable improvement on
+ordinary, full-length sentences, which is what a pasted passage will
+mostly consist of.
 """
 import re
 
@@ -27,8 +39,18 @@ _NLP_CACHE = {}
 # misses for some inflections; skip them regardless of POS tag.
 MIN_HEADWORD_LENGTH = 3
 
+# Sentences shorter than this (in alphabetic tokens) are dropped from
+# extraction entirely. Sprint 2 finding: spaCy's POS tagger is far less
+# reliable on very short fragments ("Le chat mange." mistags "mange" as
+# a noun) than on ordinary full sentences, because there isn't enough
+# surrounding context to disambiguate. Since a real passage is made of
+# full sentences, this trades a small amount of recall on fragments for
+# a meaningful accuracy gain on the vocabulary that actually gets shown
+# to the learner.
+MIN_SENTENCE_TOKENS = 4
+
 SUPPORTED_MODELS = {
-    "fr": "fr_core_news_sm",
+    "fr": "fr_core_news_md",
 }
 # To add another language: 1) `python -m spacy download <model_name>`,
 # 2) add its code and model name here, 3) add matching entries to the
@@ -79,6 +101,10 @@ def extract_candidates(user_id: int, source_id: int, text: str, language: str = 
 
     for sent in doc.sents:
         sentence_text = sent.text.strip()
+        alpha_token_count = sum(1 for t in sent if t.is_alpha)
+        if alpha_token_count < MIN_SENTENCE_TOKENS:
+            continue
+
         for token in sent:
             if not token.is_alpha or token.is_stop:
                 continue
