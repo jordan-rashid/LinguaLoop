@@ -1,7 +1,9 @@
-# LinguaLoop — Sprint 2
+# LinguaLoop — Sprint 3
 
-**Status:** week of Sep 26, 2026. Second full development sprint. Target
-completion date for the full application: **October 18, 2026**.
+**Status:** week of Oct 4, 2026. Third full development sprint. Target
+completion date for the full application: **October 18, 2026**. A written
+testing plan is due the week ending Oct 11; the application is finalized
+and presented the week ending Oct 18 — see `TESTING_PLAN.md`.
 
 ## What works end-to-end
 
@@ -30,9 +32,51 @@ completion date for the full application: **October 18, 2026**.
   sprint added styling now that the loop is proven to work.
 - Full REST API matching the endpoint table in the revised design dump
   (`app/routes.py`), plus the server-rendered pages on top of it.
-- 24 automated tests (`pytest`), covering the SM-2 algorithm, the full
+- 30 automated tests (`pytest`), covering the SM-2 algorithm, the full
   extract → accept/reject → review pipeline, candidate pagination, the
-  streak calculation, and the new provider-selection scaffolding.
+  streak calculation, provider-selection scaffolding, **and (new this
+  sprint) input validation and real-provider failure handling**. Plus 4
+  live-API-gated tests (skipped by default — see "Testing" below).
+- **New this sprint:** real-provider network failures (timeout, bad
+  response, rate limit) are caught and surfaced as a clean `502` instead
+  of crashing the app — directly relevant now that the app is meant to
+  actually be tested against a live translation API before Oct 18.
+- **New this sprint:** basic input validation on the two endpoints a
+  learner's own typing reaches most directly — pasted text (`POST
+  /api/sources`) and review ratings (`POST /api/reviews/:id`) — so a
+  malformed request 400s cleanly instead of failing deep inside spaCy or
+  the scheduler.
+
+## Sprint 3 changes at a glance
+
+1. **Error handling for real API providers.** `TranslationServiceError`
+   and `DefinitionServiceError` (`app/services/translation.py`,
+   `app/services/definition.py`) wrap any network failure, timeout, bad
+   HTTP status, or unexpected response shape from a real provider into one
+   predictable, catchable exception. `accept_candidate()` in
+   `app/routes.py` now catches these specifically and returns a `502`
+   with a clear message, rather than letting a flaky API call during the
+   live presentation surface as a raw, unhandled `500`. The candidate row
+   is left untouched on failure, so the user can just retry.
+2. **Input validation.** `POST /api/sources` now rejects non-string
+   `text`/`title` and caps passage length at `MAX_SOURCE_TEXT_LENGTH`
+   (20,000 characters) — nothing in sprints 1-2 stopped an entire
+   article or book chapter from being pasted in and flooding the
+   candidates table from one request. `POST /api/reviews/:id` now rejects
+   a non-string `rating` before it reaches the scheduler.
+3. **Live-API-gated test suite** (`tests/test_live_providers.py`). Real
+   network calls against MyMemory and the Free Dictionary API are written
+   and `pytest.mark.skipif`-gated behind `RUN_LIVE_API_TESTS=1`, so they
+   stay skipped (not silently absent) in this sandbox and are ready to run
+   for real on a machine with normal internet access.
+4. **Testing plan** (`TESTING_PLAN.md`) covering unit/integration/live
+   test levels, a manual test checklist, known limitations, and the
+   go/no-go schedule from Oct 11 to Oct 18.
+5. **Re-verified the `MIN_SENTENCE_TOKENS` limitation with new test
+   sentences** (see "Known limitations" below) rather than just carrying
+   the sprint 2 note forward unchanged — the threshold was kept at 4
+   because raising it further didn't eliminate the underlying tagging
+   error, it only reduced how often it's seen.
 
 ## Sprint 2 changes at a glance
 
@@ -104,13 +148,25 @@ dictionaries (`app/services/translation.py`, `app/services/definition.py`)
 instead of a live API. This isn't a shortcut around real work — the
 provider decision itself is still an open item from the design phase
 (comparing DeepL vs. Google Translate, and picking a dictionary API), and
-this dev sandbox confirmed *again* this sprint that it can't make outbound
-calls to arbitrary external APIs (a direct request to a public translation
-API was attempted and blocked at the network layer). Both files include a
-real-provider stub (`GoogleTranslateProvider`, `FreeDictionaryAPIProvider`)
-showing the intended integration, and can now be switched on via an
-environment variable (see "Sprint 2 changes" above) once a provider is
-chosen and tested with a real API key outside this environment.
+this dev environment confirmed *again* this sprint that it can't make
+outbound calls to arbitrary external APIs (a direct request to a public
+translation API was attempted and blocked at the network layer). That
+block is a property of this specific development sandbox, not of a normal
+computer with internet access — so the fix isn't more code here, it's
+testing the existing provider classes from a machine that isn't
+network-restricted.
+
+**Recommended next real step:** `translation.py` now includes
+`MyMemoryTranslationProvider`, which needs **no API key or signup** —
+the lowest-friction option to actually verify against a live API. On a
+normal internet connection:
+```
+LINGUALOOP_TRANSLATION_PROVIDER=mymemory python run.py
+```
+`GoogleTranslateProvider` (higher quality, needs an API key) and
+`FreeDictionaryAPIProvider` (for definitions, also no key needed) are the
+other stubs, ready to switch on the same way via environment variable
+once tested outside this sandbox.
 
 Auth is also still stubbed — every request currently operates against a
 single demo user (`_get_or_create_demo_user()` in `app/routes.py`). This
@@ -127,9 +183,16 @@ python run.py
 ```
 Then visit `http://localhost:5000`.
 
-To try the real-provider switches (untestable in this sandbox, but wired up):
+To try the real-provider switches (untestable in this sandbox, but wired up
+and ready to test on a machine with normal internet access):
 ```
+# no signup needed — try this one first
+LINGUALOOP_TRANSLATION_PROVIDER=mymemory python run.py
+
+# higher quality, needs an API key
 LINGUALOOP_TRANSLATION_PROVIDER=google GOOGLE_TRANSLATE_API_KEY=... python run.py
+
+LINGUALOOP_DEFINITION_PROVIDER=free_dictionary python run.py
 ```
 
 ## Running the tests
@@ -137,15 +200,45 @@ LINGUALOOP_TRANSLATION_PROVIDER=google GOOGLE_TRANSLATE_API_KEY=... python run.p
 ```
 pytest tests/ -v
 ```
+This runs all 30 sandbox-safe tests; the 4 live-API tests in
+`tests/test_live_providers.py` report as skipped (expected — see that
+file's docstring). To actually run them on a machine with normal internet
+access:
+```
+RUN_LIVE_API_TESTS=1 pytest tests/test_live_providers.py -v
+```
+See `TESTING_PLAN.md` for the full testing strategy and the manual test
+checklist.
 
-## What's next (sprint 3, targeting Oct 18 completion)
+## Known limitations
 
-- Lock in and actually test real translation and definition API providers
-  outside this sandbox — this is now the single biggest remaining risk to
-  the Oct 18 date, since it's the one piece that can't be verified here.
+- **Real translation/definition providers are still untested from inside
+  this sandbox** — confirmed again this sprint via a direct request
+  attempt. The code (`MyMemoryTranslationProvider`,
+  `FreeDictionaryAPIProvider`) and the live-gated tests are ready; they
+  need to be run once on a machine with normal internet access before
+  Oct 18, per `TESTING_PLAN.md`.
+- **`MIN_SENTENCE_TOKENS` (currently 4) reduces, but does not eliminate,
+  spaCy mistagging short/ambiguous words.** Re-tested this sprint with
+  additional sentences at and above the threshold — e.g. "Elle lit un
+  livre." (4 tokens, at the threshold) still mistags "lit" (verb "reads")
+  as a noun, the same category of error the threshold was added to
+  reduce. Raising the threshold further would cut even more legitimate
+  short sentences without fully solving the underlying tagging ambiguity,
+  so it's left at 4 and documented as a known accuracy trade-off rather
+  than tuned further without real passage data to tune against.
+- **No authentication.** Every request operates against a single demo
+  user, an explicit scope decision given the Oct 18 deadline (see
+  `_get_or_create_demo_user()` in `app/routes.py`).
+
+## What's next (targeting Oct 18 completion)
+
+- Actually run the live-API-gated tests and the MyMemory/Free Dictionary
+  providers on a machine with normal internet access — the single
+  biggest remaining risk to the Oct 18 date, since it can't be verified
+  in this sandbox. Tracked in `TESTING_PLAN.md`.
 - Basic auth, only if time allows — still lower priority than finishing the
   core feature set.
 - Continue the UI pass if time allows (the current styling is functional but
   basic).
-- Revisit the `MIN_SENTENCE_TOKENS` filter's threshold value based on real
-  passage testing — 4 was chosen from limited manual testing, not tuned.
+- Final presentation materials for the week of Oct 18.

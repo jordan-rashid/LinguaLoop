@@ -225,3 +225,91 @@ def test_definition_provider_selection_via_env_var(monkeypatch):
 
     monkeypatch.setenv("LINGUALOOP_DEFINITION_PROVIDER", "free_dictionary")
     assert isinstance(create_definition_service(), FreeDictionaryAPIProvider)
+
+
+def test_mymemory_provider_is_selectable_via_env_var(monkeypatch):
+    """MyMemory needs no API key, so it's the recommended first real
+    provider to actually test outside this network-restricted sandbox."""
+    from app.services.translation import (
+        MyMemoryTranslationProvider,
+        create_translation_service,
+    )
+
+    monkeypatch.setenv("LINGUALOOP_TRANSLATION_PROVIDER", "mymemory")
+    assert isinstance(create_translation_service(), MyMemoryTranslationProvider)
+
+
+# ---------------------------------------------------------- sprint 3 tests --
+
+def test_submitting_a_source_rejects_non_string_text(client):
+    """Sprint 3 input validation: a malformed payload (text as the wrong
+    type) should 400 cleanly instead of crashing inside spaCy."""
+    resp = client.post("/api/sources", json={"text": 12345})
+    assert resp.status_code == 400
+    assert "text must be a string" in resp.get_json()["error"]
+
+
+def test_submitting_a_source_rejects_text_over_the_length_cap(client):
+    from app.routes import MAX_SOURCE_TEXT_LENGTH
+
+    too_long = "Le chat dort dans le jardin. " * (MAX_SOURCE_TEXT_LENGTH // 20)
+    resp = client.post("/api/sources", json={"text": too_long})
+    assert resp.status_code == 400
+    assert "exceeds" in resp.get_json()["error"]
+
+
+def test_submitting_a_review_rejects_non_string_rating(client):
+    resp = client.post("/api/sources", json={"text": "Le chat dort dans la maison."})
+    source_id = resp.get_json()["source_id"]
+    candidates = get_candidates(client, source_id)
+    chat = next(c for c in candidates if c["headword"] == "chat")
+    card = client.post(f"/api/candidates/{chat['id']}/accept").get_json()
+
+    review_resp = client.post(f"/api/reviews/{card['id']}", json={"rating": 4})
+    assert review_resp.status_code == 400
+
+
+def test_accept_candidate_returns_502_when_translation_service_fails(client, monkeypatch):
+    """Sprint 3: a real provider's network failure must surface as a
+    clean 502 rather than an unhandled 500 — important once this is
+    tested against a live API where failures are a real possibility,
+    including during the final presentation."""
+    import app.routes as routes
+    from app.services.translation import TranslationServiceError
+
+    class FailingTranslationProvider:
+        def translate(self, word, source_lang, target_lang="en"):
+            raise TranslationServiceError("simulated network failure")
+
+    resp = client.post("/api/sources", json={"text": "Le chat dort dans la maison."})
+    source_id = resp.get_json()["source_id"]
+    candidates = get_candidates(client, source_id)
+    chat = next(c for c in candidates if c["headword"] == "chat")
+
+    monkeypatch.setattr(routes, "translation_service", FailingTranslationProvider())
+    accept_resp = client.post(f"/api/candidates/{chat['id']}/accept")
+    assert accept_resp.status_code == 502
+    assert "translation service unavailable" in accept_resp.get_json()["error"]
+
+    # the candidate should still exist, so the user can simply retry
+    remaining = get_candidates(client, source_id)
+    assert chat["id"] in {c["id"] for c in remaining}
+
+
+def test_accept_candidate_returns_502_when_definition_service_fails(client, monkeypatch):
+    import app.routes as routes
+    from app.services.definition import DefinitionServiceError
+
+    class FailingDefinitionProvider:
+        def define(self, word, language):
+            raise DefinitionServiceError("simulated network failure")
+
+    resp = client.post("/api/sources", json={"text": "Le chat dort dans la maison."})
+    source_id = resp.get_json()["source_id"]
+    candidates = get_candidates(client, source_id)
+    chat = next(c for c in candidates if c["headword"] == "chat")
+
+    monkeypatch.setattr(routes, "definition_service", FailingDefinitionProvider())
+    accept_resp = client.post(f"/api/candidates/{chat['id']}/accept")
+    assert accept_resp.status_code == 502
+    assert "definition service unavailable" in accept_resp.get_json()["error"]

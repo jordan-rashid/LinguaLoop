@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request
 
 from app.models import Candidate, Card, KnownWord, ReviewHistory, Source, User, db
-from app.services.definition import create_definition_service
+from app.services.definition import DefinitionServiceError, create_definition_service
 from app.services.extraction import extract_candidates
 from app.services.scheduler import InvalidRatingError, apply_review
-from app.services.translation import create_translation_service
+from app.services.translation import TranslationServiceError, create_translation_service
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -21,6 +21,12 @@ definition_service = create_definition_service()
 # Sprint 2: default page size for candidate review, addressing the peer
 # feedback that a long passage could dump dozens of words onto one screen.
 CANDIDATE_PAGE_SIZE = 10
+
+# Sprint 3: upper bound on a single pasted passage. Nothing in week 1-2
+# enforced this, so a learner (or the live demo) pasting in an entire
+# article/book chapter would run spaCy over an unbounded string and could
+# flood the candidates table with thousands of rows from one request.
+MAX_SOURCE_TEXT_LENGTH = 20_000
 
 
 def _get_or_create_demo_user():
@@ -42,11 +48,25 @@ def _get_or_create_demo_user():
 def submit_source():
     """POST /api/sources — submit a pasted passage; triggers extraction."""
     payload = request.get_json(force=True) or {}
-    text = (payload.get("text") or "").strip()
+    text = payload.get("text")
     title = payload.get("title")
 
+    # Sprint 3: basic type/shape validation. Sprint 1-2 trusted the client
+    # to send a string; a malformed request (e.g. text as a number or a
+    # list, from a buggy client call) would have crashed deep inside
+    # spaCy with a confusing error instead of a clean 400 here.
+    if text is not None and not isinstance(text, str):
+        return jsonify({"error": "text must be a string"}), 400
+    if title is not None and not isinstance(title, str):
+        return jsonify({"error": "title must be a string"}), 400
+
+    text = (text or "").strip()
     if not text:
         return jsonify({"error": "text is required"}), 400
+    if len(text) > MAX_SOURCE_TEXT_LENGTH:
+        return jsonify({
+            "error": f"text exceeds the {MAX_SOURCE_TEXT_LENGTH}-character limit per source",
+        }), 400
 
     user = _get_or_create_demo_user()
     source = Source(user_id=user.id, raw_text=text, title=title)
@@ -103,8 +123,21 @@ def accept_candidate(candidate_id):
     candidate = Candidate.query.get_or_404(candidate_id)
     user = User.query.get(candidate.user_id)
 
-    translation = translation_service.translate(candidate.headword, source_lang=user.target_language)
-    definition = definition_service.define(candidate.headword, language=user.target_language)
+    # Sprint 3: a real provider (MyMemory, Free Dictionary API) can fail on
+    # a network hiccup, timeout, or rate limit — especially relevant now
+    # that this is meant to actually be tested against live APIs outside
+    # the sandbox, including during the final presentation. Before this,
+    # that failure would propagate as an unhandled 500 with a stack trace
+    # and the candidate would be left stuck mid-accept. Now it's a clean,
+    # expected 502 and the candidate row is untouched, so the user can
+    # just retry.
+    try:
+        translation = translation_service.translate(candidate.headword, source_lang=user.target_language)
+        definition = definition_service.define(candidate.headword, language=user.target_language)
+    except TranslationServiceError as exc:
+        return jsonify({"error": "translation service unavailable, please try again", "detail": str(exc)}), 502
+    except DefinitionServiceError as exc:
+        return jsonify({"error": "definition service unavailable, please try again", "detail": str(exc)}), 502
 
     card = Card(
         user_id=candidate.user_id,
@@ -179,6 +212,9 @@ def submit_review(card_id):
     card = Card.query.get_or_404(card_id)
     payload = request.get_json(force=True) or {}
     rating = payload.get("rating")
+
+    if not isinstance(rating, str):
+        return jsonify({"error": "rating must be a string"}), 400
 
     try:
         apply_review(card, rating)

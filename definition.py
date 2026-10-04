@@ -10,8 +10,18 @@ is chosen (open item in the Week 1 design dump). Sprint 2 addition:
 create_definition_service() reads LINGUALOOP_DEFINITION_PROVIDER so a
 real provider can be switched on via environment variable, once chosen
 and tested outside this network-restricted sandbox.
+
+Sprint 3 addition: DefinitionServiceError, mirroring TranslationService's
+error handling, so a real provider's network failures surface as one
+predictable, catchable exception instead of an unhandled crash.
 """
 import os
+
+
+class DefinitionServiceError(Exception):
+    """Raised when a real definition provider fails — network error,
+    timeout, bad HTTP status, or an unexpected response shape. The mock
+    provider never raises this, since it never leaves the process."""
 
 
 class DefinitionProvider:
@@ -68,12 +78,22 @@ class FreeDictionaryAPIProvider(DefinitionProvider):
     def define(self, word: str, language: str) -> str:
         import requests
 
-        resp = requests.get(f"{self.BASE_URL}/{language}/{word}", timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
+        try:
+            resp = requests.get(f"{self.BASE_URL}/{language}/{word}", timeout=5)
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.RequestException as exc:
+            raise DefinitionServiceError(
+                f"Dictionary API request failed for word {word!r}: {exc}"
+            ) from exc
+        except ValueError as exc:
+            raise DefinitionServiceError(
+                f"Dictionary API returned a non-JSON response for word {word!r}: {exc}"
+            ) from exc
+
         try:
             return data[0]["meanings"][0]["definitions"][0]["definition"]
-        except (KeyError, IndexError):
+        except (KeyError, IndexError, TypeError):
             return "[no definition returned]"
 
 
