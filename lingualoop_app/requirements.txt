@@ -1,0 +1,23 @@
+# REQUIRES PYTHON 3.12 (3.11 also works; it is what development used).
+# Do NOT use a very new Python (e.g. 3.15): spaCy has no prebuilt package for
+# it, so pip tries to compile spaCy's helper libraries and fails on Windows
+# with "Microsoft Visual C++ 14.0 or greater is required". Setup steps are in
+# README.md. On Windows, double-clicking start_lingualoop.bat does the whole
+# setup for you (it finds Python 3.12 and installs these requirements).
+
+Flask>=3.1
+Flask-SQLAlchemy>=3.1
+spacy>=3.8
+requests>=2.32
+gunicorn>=22.0; sys_platform != "win32"   # deployment only; does not run on Windows
+pytest>=8.0
+
+# After installing requirements, also run:
+#   python -m spacy download fr_core_news_md
+#
+# (Sprint 2 upgraded from fr_core_news_sm to fr_core_news_md — see
+# README.md "Sprint 2 changes" for why.)
+#
+# To add another language later: download its spaCy model the same way,
+# then register it in SUPPORTED_MODELS in app/services/extraction.py
+# (see README.md "Language: French for now, designed to add more later").

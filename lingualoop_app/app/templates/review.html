@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Daily review</h1>
+{% if not cards %}
+  <p>Nothing due right now. Come back later, or <a href="/">import a new passage</a>.</p>
+{% else %}
+  <p>{{ cards|length }} card{{ "s" if cards|length != 1 else "" }} due. Try to recall the
+  meaning first, then reveal the answer and rate how it went.</p>
+{% endif %}
+{% for card in cards %}
+<div class="card">
+  <div class="headword">{{ card.headword }}</div>
+  <p class="context">{{ card.context_sentence }}</p>
+  {# <details> gives a "show answer" step with no JavaScript. The rating
+     buttons live inside it so a card can't be rated before it's revealed. #}
+  <details>
+    <summary>Show answer</summary>
+    <p><strong>Translation:</strong> {{ card.translation }}<br>
+       <strong>Definition:</strong> {{ card.definition }}</p>
+    <form method="post" action="/review/{{ card.id }}" class="rating-buttons">
+      <button name="rating" value="again">Again</button>
+      <button name="rating" value="hard">Hard</button>
+      <button name="rating" value="good">Good</button>
+      <button name="rating" value="easy">Easy</button>
+    </form>
+  </details>
+</div>
+{% endfor %}
+{% endblock %}

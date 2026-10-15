@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Review extracted words</h1>
+<p>{{ total }} candidate{{ "s" if total != 1 else "" }} from this passage.</p>
+
+{% if not candidates %}
+  <p>No candidates left on this page — accept/reject them all, or nothing new was found.
+  Accepted words are ready in your <a href="/review">daily review</a>.</p>
+{% else %}
+  <p>Accept the words you want to learn; reject the rest. A translation and
+  definition are only fetched for words you accept.</p>
+{% endif %}
+
+{% for c in candidates %}
+<div class="card">
+  <div class="headword">{{ c.headword }}</div>
+  <p class="context">&ldquo;{{ c.context_sentence }}&rdquo;</p>
+  <div class="actions">
+    <form method="post" action="/candidates/{{ c.id }}/accept">
+      <input type="hidden" name="source_id" value="{{ source_id }}">
+      <input type="hidden" name="page" value="{{ page }}">
+      <button type="submit">Accept</button>
+    </form>
+    <form method="post" action="/candidates/{{ c.id }}/reject" class="reject">
+      <input type="hidden" name="source_id" value="{{ source_id }}">
+      <input type="hidden" name="page" value="{{ page }}">
+      <button type="submit">Reject</button>
+    </form>
+    <form method="post" action="/candidates/{{ c.id }}/known" class="reject">
+      <input type="hidden" name="source_id" value="{{ source_id }}">
+      <input type="hidden" name="page" value="{{ page }}">
+      <button type="submit">Already know it</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}
+    <a href="/candidates/{{ source_id }}?page={{ page - 1 }}">&larr; Previous</a>
+  {% else %}
+    <span class="disabled">&larr; Previous</span>
+  {% endif %}
+
+  <span>Page {{ page }} of {{ total_pages }}</span>
+
+  {% if page < total_pages %}
+    <a href="/candidates/{{ source_id }}?page={{ page + 1 }}">Next &rarr;</a>
+  {% else %}
+    <span class="disabled">Next &rarr;</span>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

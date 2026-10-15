@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="stats-grid">
+  <div class="stat-tile">
+    <div class="value">{{ stats.current_streak_days }}</div>
+    <div class="label">day streak</div>
+  </div>
+  <div class="stat-tile">
+    <div class="value">{{ stats.cards_due_today }}</div>
+    <div class="label">cards due today</div>
+  </div>
+  <div class="stat-tile">
+    <div class="value">{{ stats.total_active_cards }}</div>
+    <div class="label">total active cards</div>
+  </div>
+  <div class="stat-tile">
+    <div class="value">{{ stats.known_words }}</div>
+    <div class="label">known words</div>
+  </div>
+</div>
+{% endblock %}
